@@ -3,6 +3,13 @@
 set root (dirname (status filename))
 set -l error false
 
+for dependency in tmux inotifywait
+    if not command -q $dependency
+        echo "Missing test dependency: $dependency" >&2
+        exit 127
+    end
+end
+
 set -l temp_dir "$(mktemp -d)"
 fish "$root/tests/_run.fish" "$root/tests/_example_test.fish" "$temp_dir"
 or begin

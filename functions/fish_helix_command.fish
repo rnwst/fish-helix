@@ -20,7 +20,7 @@ function fish_helix_command
             commandline -C (math max\(0, (commandline -C) - $count\))
             __fish_helix_extend_by_command $command
         case {move,extend}_char_right
-            commandline -C (math (commandline -C) + $count)
+            commandline -C (math min\((__fish_helix_buffer_length), (commandline -C) + $count\))
             __fish_helix_extend_by_command $command
 
         case char_up
@@ -96,7 +96,6 @@ function fish_helix_command
             __fish_helix_find_prev_cr $fish_bind_mode $count 1
         case find_prev_cr
             __fish_helix_find_prev_cr $fish_bind_mode $count 0
-
         case goto_line_start
             commandline -f beginning-of-line
             __fish_helix_extend_by_mode
@@ -157,6 +156,17 @@ function fish_helix_command
         case replace_selection_clip
             __fish_helix_replace_selection "" "fish_clipboard_paste" --clip
 
+        case select_line
+            __fish_helix_select_line extend
+        case select_line_bounds
+            __fish_helix_select_line expand
+        case shrink_to_line_bounds
+            __fish_helix_select_line shrink
+        case join_lines
+            __fish_helix_join_lines
+        case match_bracket
+            commandline -f jump-to-matching-bracket
+            __fish_helix_extend_by_mode
         case select_all
             commandline -f beginning-of-buffer begin-selection end-of-buffer end-of-line backward-char
 
@@ -188,6 +198,160 @@ function __fish_helix_find_char -a mode count fish_cmdline till
     for i in (seq 2 $count)
         commandline -f $till repeat-jump
     end
+end
+
+function __fish_helix_buffer_length
+    commandline --current-buffer |
+    perl -CS -Mutf8 -e 'use open qw(:std :utf8); my $buffer = do { local $/; <STDIN> }; chomp $buffer; print length $buffer'
+end
+
+function __fish_helix_select_range -a start end cursor_side
+    set -l length (commandline --current-buffer |
+    perl -CS -Mutf8 -e 'use open qw(:std :utf8); my $buffer = do { local $/; <STDIN> }; chomp $buffer; print length $buffer')
+    if test $start -lt 0
+        set start 0
+    else if test $start -gt $length
+        set start $length
+    end
+    if test $end -lt 0
+        set end 0
+    else if test $end -gt $length
+        set end $length
+    end
+
+    commandline -f end-selection
+
+    if test $end -le $start
+        commandline -C $start
+        commandline -f begin-selection
+        return
+    end
+
+    if test "$cursor_side" = left
+        commandline -C (math $end - 1)
+        commandline -f begin-selection
+        for i in (seq 1 (math $end - $start - 1))
+            commandline -f backward-char
+        end
+    else
+        commandline -C $start
+        commandline -f begin-selection
+        for i in (seq 1 (math $end - $start - 1))
+            commandline -f forward-char
+        end
+    end
+end
+
+function __fish_helix_select_line -a action
+    commandline --current-buffer |
+    perl -CS -Mutf8 -e '
+        use open qw(:std :utf8);
+        my ($action, $cursor, $selection_start, $selection_end) = @ARGV;
+        my $buffer = do { local $/; <STDIN> };
+        chomp $buffer;
+        my $length = length $buffer;
+
+        sub clamp {
+            my ($value) = @_;
+            return 0 if $value < 0;
+            return $length if $value > $length;
+            return $value;
+        }
+
+        sub bounds_at {
+            my ($pos) = @_;
+            $pos = clamp($pos);
+            my $search = $pos;
+            $search = $length - 1 if $search >= $length && $length > 0;
+            my $previous = rindex($buffer, "\n", $search - 1);
+            my $start = $previous < 0 ? 0 : $previous + 1;
+            my $next = index($buffer, "\n", $search);
+            my $end = $next < 0 ? $length : $next + 1;
+            return ($start, $end);
+        }
+
+        sub is_line_start {
+            my ($pos) = @_;
+            return $pos == 0 || substr($buffer, $pos - 1, 1) eq "\n";
+        }
+
+        sub is_line_end {
+            my ($pos) = @_;
+            return $pos == $length || ($pos > 0 && substr($buffer, $pos - 1, 1) eq "\n");
+        }
+
+        my $has_selection = length($selection_start) && length($selection_end) && $selection_start != $selection_end;
+        my ($start, $end);
+
+        if ($action eq "extend" && $has_selection) {
+            ($start, $end) = sort { $a <=> $b } ($selection_start, $selection_end);
+            if (is_line_start($start) && is_line_end($end)) {
+                if ($end < $length) {
+                    my (undef, $next_end) = bounds_at($end);
+                    $end = $next_end;
+                }
+            } else {
+                ($start, $end) = bounds_at($cursor);
+            }
+        } elsif ($action eq "expand" && $has_selection) {
+            my ($left, $right) = sort { $a <=> $b } ($selection_start, $selection_end);
+            my $last = $right > $left ? $right - 1 : $cursor;
+            ($start) = bounds_at($left);
+            (undef, $end) = bounds_at($last);
+        } elsif ($action eq "shrink" && $has_selection) {
+            my ($left, $right) = sort { $a <=> $b } ($selection_start, $selection_end);
+            $start = $left;
+            if (!is_line_start($start)) {
+                my $next = index($buffer, "\n", $start);
+                $start = $next < 0 ? $right : $next + 1;
+            }
+
+            $end = $right;
+            if (!is_line_end($end)) {
+                my $previous = rindex($buffer, "\n", $end - 1);
+                $end = $previous < 0 ? $left : $previous + 1;
+            }
+
+            if ($start >= $end) {
+                ($start, $end) = ($left, $right);
+            }
+        } else {
+            ($start, $end) = bounds_at($cursor);
+        }
+
+        print $start, " ", $end, "\n";
+    ' $action (commandline -C) (commandline -B) (commandline -E) |
+    read -l start end
+    or return
+
+    __fish_helix_select_range $start $end
+end
+
+function __fish_helix_join_lines
+    set -l selection_start (commandline -B)
+    set -l selection_end (commandline -E)
+    test -n "$selection_start"
+    or return
+    test -n "$selection_end"
+    or return
+
+    set -l result (commandline --current-buffer |
+    perl -CS -Mutf8 -e '
+        use open qw(:std :utf8);
+        my ($selection_start, $selection_end) = @ARGV;
+        my $buffer = do { local $/; <STDIN> };
+        chomp $buffer;
+        my ($start, $end) = sort { $a <=> $b } ($selection_start, $selection_end);
+        my $part = substr($buffer, $start, $end - $start);
+        exit 1 unless $part =~ /\n/;
+        $part =~ s/[ \t]*\n[ \t]*/ /g;
+        my $updated = substr($buffer, 0, $start) . $part . substr($buffer, $end);
+        print $updated, "\0", $start + length($part), "\0";
+    ' $selection_start $selection_end | string split0)
+    or return
+
+    commandline $result[1]
+    __fish_helix_select_range $selection_start $result[2]
 end
 
 function __fish_helix_find_next_cr -a mode count skip
@@ -299,7 +463,17 @@ function __fish_helix_next_word -a mode count regex
         do { local $/; substr <>, '$cursor' } =~ m/(?:'$regex'){0,'$count'}/ux;
         print $-[1], " ", $+[1];' |
     read -f left right
-    test "$left" = "$right" && return
+    if test "$left" = "$right"
+        commandline --current-buffer |
+        perl -0 -e 'chomp; exit substr($_, -1) eq "\n" ? 0 : 1'
+        or return
+
+        commandline -C (math $cursor + $left)
+        if test $mode = default
+            commandline -f begin-selection
+        end
+        return
+    end
     if test $mode = default
         commandline -C (math $cursor + $left)
         commandline -f begin-selection
@@ -365,6 +539,12 @@ function __fish_helix_paste_before -a cmd_paste
     set -l cursor (commandline -C)
     set -l start (commandline -B)
     set -l end (commandline -E)
+    if test -z "$start" -o -z "$end"
+        commandline -C $cursor
+        $cmd_paste
+        commandline -f end-selection
+        return
+    end
     commandline -C $start
     $cmd_paste
     commandline -f begin-selection
@@ -381,6 +561,12 @@ function __fish_helix_paste_after -a cmd_paste
     set -l cursor (commandline -C)
     set -l start (commandline -B)
     set -l end (commandline -E)
+    if test -z "$start" -o -z "$end"
+        commandline -C $cursor
+        $cmd_paste
+        commandline -f end-selection
+        return
+    end
     commandline -C $end
     $cmd_paste
 

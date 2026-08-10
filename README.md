@@ -1,30 +1,81 @@
 # fish-helix
-helix key bindings for fish
+
+Helix-like key bindings for the fish command line.
 
 # Installation
 
-Dependencies: fish >= 3.6², GNU tools¹, perl.
+Dependencies: fish >= 4.0, perl, and common GNU tools.
+
+Tested with fish 4.8.1.
 
 1. Copy `functions` directory as `~/.config/fish/functions`.
 2. Run `fish_helix_key_bindings`.
 
-To undo, run `fish_default_key_bindings`.
+## Compatibility
 
-¹ Should work with POSIX, but untested. Report any issues.
+The current branch targets fish 4.x. Older fish 3.x versions are not supported here.
 
-² fish >= 3.4 is sort of good enough. Clone fish-helix
-[fish3.4](https://github.com/sshilovsky/fish-helix/tree/fish3.4) branch.
+If you need fish 3.x support, use an older release or branch.
+
+## Revert
+
+To go back to fish's default bindings, run:
+
+```fish
+fish_default_key_bindings
+```
 
 # Tests
 
-1. Install tmux and inotify-tools.
-2. Run `run-tests` script
+Install the test dependencies:
+
+- `tmux`
+- `inotify-tools`
+- `perl`
+- fish 4.x
+
+Then run:
+
+```fish
+./run-tests
+```
+
+The tests drive an interactive fish shell through tmux. They send keys with short pauses so fish has time to update the command line between checks.
 
 # Configuration
 
 `fish_helix_command` function provides some helix-like actions. Use it for custom bindings.
 
-## IMPORTANT!!!
+Example:
+
+```fish
+bind --user -M default x "fish_helix_command select_line"
+```
+
+# Supported Keys
+
+This is a Helix-like keymap for fish's command line. It is not a full Helix editor inside fish.
+
+Normal and select mode support includes:
+
+- Modes: `Escape`, `v`, `i`, `a`, `I`, `A`, `o`, `O`
+- Motions: `h`, `j`, `k`, `l`, arrows, `w`, `b`, `e`, `W`, `B`, `E`, `f`, `F`, `t`, `T`, `Alt-.`
+- Goto: `gh`, `gl`, `gs`, `gg`, `ge`, `G`, `Home`, `End`
+- Changes: `r`, `~`, `` ` ``, `` Alt-` ``, `u`, `U`, `d`, `Alt-d`, `c`, `Alt-c`, `y`, `p`, `P`, `R`
+- Selection: `x`, `X`, `Alt-x`, `%`, `;`, `Alt-;`, `J`, `mm`
+- Clipboard: `Space-y`, `Space-p`, `Space-P`, `Space-R`
+
+## Known Limits
+
+Some Helix features do not fit well in a shell prompt and are not implemented:
+
+- Multiple selections
+- LSP and tree-sitter features
+- Windows and pickers
+- Registers and macros
+- Most shell/filter commands from Helix
+
+## Custom Binding Notes
 
 When defining your own bindings using fish_helix_command, be aware that it can break
 stuff sometimes.

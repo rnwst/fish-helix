@@ -90,10 +90,38 @@ function _input
         switch "$sequence"
         case "Normal"
             $tmux send-keys F11
+            sleep 0.1
         case "Line"
             $tmux send-keys F11 o
+            sleep 0.1
+        case "Escape"
+            $tmux send-keys Escape
+            sleep 0.1
+        case "Enter"
+            $tmux send-keys Enter
+            sleep 0.1
+        case "t-enter"
+            $tmux send-keys t Enter
+            sleep 0.1
+        case "f-enter"
+            $tmux send-keys f Enter
+            sleep 0.05
+        case "T-enter"
+            $tmux send-keys T Enter
+            sleep 0.05
+        case "F-enter"
+            $tmux send-keys F Enter
+            sleep 0.05
         case '*'
-            $tmux send-keys -- "$sequence"
+            if string match -qr '[^[:ascii:]]' -- "$sequence"
+                $tmux send-keys -- "$sequence"
+                sleep 0.1
+            else
+                for char in (string split '' -- "$sequence")
+                    $tmux send-keys -- "$char"
+                    sleep 0.1
+                end
+            end
         end
     end
 end
@@ -101,7 +129,7 @@ end
 set -g fish_key_bindings fish_helix_key_bindings
 bind --user --erase --all
 for mode in default visual insert
-    bind --user -M $mode -k f12 validate
-    bind --user -M $mode -k f9 check
+    bind --user -M $mode f12 validate
+    bind --user -M $mode f9 check
 end
-bind --user -M insert -m default -k f11 ''
+bind --user -M insert -m default f11 repaint-mode

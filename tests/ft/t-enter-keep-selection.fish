@@ -1,2 +1,2 @@
-_input asdfg Normal gh t\rt\r
+_input asdfg Normal gh t-enter t-enter
 _selection asdfg
