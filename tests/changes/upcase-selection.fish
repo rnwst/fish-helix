@@ -1,2 +1,2 @@
-_input abc Normal % Escape "`"
+_input abc Normal % Alt-backtick
 _buffer ABC

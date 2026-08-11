@@ -100,6 +100,20 @@ function _input
             case Enter
                 $tmux send-keys Enter
                 sleep 0.1
+            case Backspace
+                $tmux send-keys Backspace
+                sleep 0.1
+            case Ctrl-a
+                $tmux send-keys C-a
+                sleep 0.1
+            case Ctrl-x
+                $tmux send-keys C-x
+                sleep 0.1
+            case Alt-colon
+                $tmux send-keys M-:
+                sleep 0.1
+            case Pause
+                sleep 0.5
             case t-enter
                 $tmux send-keys t Enter
                 sleep 0.1
@@ -133,3 +147,5 @@ for mode in default visual insert
     bind --user -M $mode f9 check
 end
 bind --user -M insert -m default f11 repaint-mode
+
+source "$(dirname (status filename))/_defer.fish"

@@ -3,6 +3,13 @@
 set root (dirname (status filename))
 set -l error false
 
+argparse h/help v/verbose -- $argv
+or exit 2
+if test -n "$_flag_help"
+    echo "Usage: ./run-tests [-v|--verbose] [TEST_DIRECTORY ...]"
+    exit
+end
+
 for dependency in tmux inotifywait
     if not command -q $dependency
         echo "Missing test dependency: $dependency" >&2
@@ -28,7 +35,9 @@ if test (count $argv) = 0
 end
 for dir in $argv
     find "$dir" -type f -name "[^_]*.fish" | while read -l -d\n test_file
-        # FIXME on `-v` echo "$test_file"
+        if test -n "$_flag_verbose"
+            echo "$test_file"
+        end
         set temp_dir "$(mktemp -d)"
         if fish "$root/tests/_run.fish" "$test_file" "$temp_dir"
             if test -e "$temp_dir/broken"

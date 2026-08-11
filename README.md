@@ -40,6 +40,8 @@ Then run:
 ./run-tests
 ```
 
+Pass `--verbose` to print each test file as it runs.
+
 The tests drive an interactive fish shell through tmux. They send keys with short pauses so fish has time to update the command line between checks.
 
 # Configuration
@@ -52,6 +54,26 @@ Example:
 bind --user -M default x "fish_helix_command select_line"
 ```
 
+On fish 4, input functions execute synchronously, so a binding can compose multiple actions:
+
+```fish
+bind --user -M default z "fish_helix_command goto_line_start goto_line_end"
+```
+
+All digits are count prefixes by default, including `0`. To use `0` to move to line-start (like in vim) while retaining it inside counts such as `10`, add this user binding after enabling fish-helix:
+
+```fish
+for mode in default visual
+    bind --user -M $mode 0 '
+        if string match -rq "^[1-9][0-9]*$" "$fish_bind_count"
+            fish_bind_count 0
+        else
+            fish_helix_command goto_line_start
+        end
+    '
+end
+```
+
 # Supported Keys
 
 This is a Helix-like keymap for fish's command line. It is not a full Helix editor inside fish.
@@ -61,9 +83,12 @@ Normal and select mode support includes:
 - Modes: `Escape`, `v`, `i`, `a`, `I`, `A`, `o`, `O`
 - Motions: `h`, `j`, `k`, `l`, arrows, `w`, `b`, `e`, `W`, `B`, `E`, `f`, `F`, `t`, `T`, `Alt-.`
 - Goto: `gh`, `gl`, `gs`, `gg`, `ge`, `G`, `Home`, `End`
-- Changes: `r`, `~`, `` ` ``, `` Alt-` ``, `u`, `U`, `d`, `Alt-d`, `c`, `Alt-c`, `y`, `p`, `P`, `R`
-- Selection: `x`, `X`, `Alt-x`, `%`, `;`, `Alt-;`, `J`, `mm`
+- Counts: `0`-`9`; `Backspace` removes the last pending digit and `Escape` clears the count
+- Changes: `r`, `~`, `` ` ``, `` Alt-` ``, `Ctrl-a`, `Ctrl-x`, `u`, `U`, `d`, `Alt-d`, `c`, `Alt-c`, `y`, `p`, `P`, `R`
+- Selection: `x`, `X`, `Alt-x`, `%`, `;`, `Alt-;`, `Alt-:`, `_`, `J`, `mm`
 - Clipboard: `Space-y`, `Space-p`, `Space-P`, `Space-R`
+
+In Normal and select mode, `Ctrl-a` increments a decimal number and `Ctrl-x` decrements it. Insert mode retains fish's shared `Ctrl-x` clipboard-copy binding.
 
 ## Known Limits
 
@@ -74,3 +99,6 @@ Some Helix features do not fit well in a shell prompt and are not implemented:
 - Windows and pickers
 - Registers and macros
 - Most shell/filter commands from Helix
+- Editor-specific indentation, formatting, search, and unimpaired motions (`[p`, `]p`, `[<Space>`, ...)
+
+Insert mode otherwise keeps fish's shell-oriented bindings for completion, autosuggestions, clipboard access, and word deletion. `Ctrl-c` also remains command-line cancellation rather than Helix's comment command.

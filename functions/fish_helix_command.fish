@@ -1,6 +1,3 @@
-# FIXME this can't be called in sequence in general case,
-# because of unsynchronized `commandline -f` and `commandline -C`
-
 function fish_helix_command
     argparse h/help -- $argv
     or return 1
@@ -9,8 +6,6 @@ function fish_helix_command
         return
     end
 
-    # TODO only single command allowed really yet,
-    #     because `commandline -f` queues actions, while `commandline -C` is immediate
     for command in $argv
         set -f count (fish_bind_count -r)
         set -f count_defined $status
@@ -142,6 +137,19 @@ function fish_helix_command
                 set fish_bind_mode insert
                 commandline -f end-selection end-of-line repaint-mode
 
+            case replace_char
+                __fish_helix_prepare_replace_char $fish_bind_mode
+            case replace_char_key
+                __fish_helix_replace_char_key $argv[2]
+                return
+            case cancel_replace_char
+                __fish_helix_cancel_replace_char
+
+            case increment
+                __fish_helix_change_number $count
+            case decrement
+                __fish_helix_change_number (math -$count)
+
             case delete_selection
                 commandline -f kill-selection begin-selection
             case delete_selection_noyank
@@ -176,11 +184,68 @@ function fish_helix_command
                 __fish_helix_extend_by_mode
             case select_all
                 commandline -f beginning-of-buffer begin-selection end-of-buffer end-of-line backward-char
+            case trim_selection
+                __fish_helix_trim_selection
+            case ensure_selection_forward
+                __fish_helix_ensure_selection_forward
 
             case '*'
                 echo "[fish-helix]" Unknown command $command >&2
         end
     end
+end
+
+function __fish_helix_prepare_replace_char -a mode
+    set -g __fish_helix_replace_char_mode $mode
+    set fish_bind_mode replace_one
+    commandline -f repaint-mode
+end
+
+function __fish_helix_replace_char_key -a key
+    set -l mode $__fish_helix_replace_char_mode
+    set -e __fish_helix_replace_char_mode
+    test -n "$mode"
+    or set mode default
+
+    if test "$key" = \r
+        set key \n
+    end
+
+    if test (string length -- "$key") -ne 1
+        or string match -qr '[[:cntrl:]]' -- "$key" && not contains -- "$key" \n \t
+        set fish_bind_mode $mode
+        commandline -f repaint-mode
+        return
+    end
+
+    set -l start (commandline -B)
+    set -l end (commandline -E)
+    set -l cursor (commandline -C)
+    if test -z "$start" -o -z "$end" -o "$start" = "$end"
+        set fish_bind_mode $mode
+        commandline -f repaint-mode
+        return
+    end
+
+    commandline --current-selection | sed -z 's/\n$//' | read -lz selection
+    string repeat --no-newline --count (string length -- "$selection") -- "$key" | read -z replacement
+    set -l cursor_side right
+    if test "$cursor" = "$start"
+        set cursor_side left
+    end
+
+    __fish_helix_replace_range $start $end "$replacement" $cursor_side
+    set fish_bind_mode default
+    commandline -f repaint-mode
+end
+
+function __fish_helix_cancel_replace_char
+    set -l mode $__fish_helix_replace_char_mode
+    set -e __fish_helix_replace_char_mode
+    test -n "$mode"
+    or set mode default
+    set fish_bind_mode $mode
+    commandline -f repaint-mode
 end
 
 function __fish_helix_extend_by_command -a piece
@@ -215,6 +280,10 @@ function __fish_helix_find_char_key -a key
     or set mode default
     set fish_bind_mode $mode
 
+    if test "$key" = \r
+        set key \n
+    end
+
     if __fish_helix_apply_find_char $mode $count $direction $inclusive "$key"
         set -g __fish_helix_last_find_char_key "$key"
         set -g __fish_helix_last_find_char_direction $direction
@@ -242,6 +311,11 @@ end
 function __fish_helix_repeat_last_motion -a mode count
     test -n "$__fish_helix_last_find_char_key"
     or return
+    if test $mode = default
+        and test -n "$(commandline -B)"
+        and test -n "$(commandline -E)"
+        set mode visual
+    end
     __fish_helix_apply_find_char $mode $count $__fish_helix_last_find_char_direction $__fish_helix_last_find_char_inclusive "$__fish_helix_last_find_char_key"
 end
 
@@ -253,6 +327,7 @@ function __fish_helix_apply_find_char -a mode count direction inclusive key
         my ($direction, $inclusive, $count, $cursor, $key) = @ARGV;
         my $buffer = do { local $/; <STDIN> };
         chomp $buffer;
+        $buffer .= "\n" if $key eq "\n";
         my @chars = split //, $buffer;
         my $length = scalar @chars;
         my $seen = 0;
@@ -350,6 +425,93 @@ function __fish_helix_select_range -a start end cursor_side
         for i in (seq 1 (math $end - $start - 1))
             commandline -f forward-char
         end
+    end
+end
+
+function __fish_helix_replace_range -a start end replacement cursor_side
+    commandline --current-buffer | sed -z 's/\n$//' | read -lz buffer
+    set -l updated (printf %s "$buffer" |
+        perl -CS -Mutf8 -e '
+        use open qw(:std :utf8);
+        my ($start, $end, $replacement) = @ARGV;
+        my $buffer = do { local $/; <STDIN> };
+        print substr($buffer, 0, $start), $replacement, substr($buffer, $end), "\0";
+    ' $start $end "$replacement" | string split0)
+
+    commandline -f begin-undo-group
+    commandline --replace -- "$updated"
+    __fish_helix_select_range $start (math $start + (string length -- "$replacement")) $cursor_side
+    commandline -f end-undo-group
+end
+
+function __fish_helix_change_number -a amount
+    set -l result (commandline --current-buffer |
+        perl -CS -Mutf8 -e '
+        use open qw(:std :utf8);
+        my ($cursor, $amount) = @ARGV;
+        my $buffer = do { local $/; <STDIN> };
+        chomp $buffer;
+
+        my ($start, $end, $found);
+        while ($buffer =~ /-?[0-9]+/g) {
+            my ($candidate_start, $candidate_end) = ($-[0], $+[0]);
+            if (($candidate_start <= $cursor && $cursor < $candidate_end) || $candidate_start > $cursor) {
+                ($start, $end, $found) = ($candidate_start, $candidate_end, $&);
+                last;
+            }
+        }
+        exit 1 unless defined $found;
+
+        my $width = length($found =~ s/^-//r);
+        my $number = $found + $amount;
+        my $negative = $number < 0;
+        my $digits = sprintf("%0*d", $width, abs($number));
+        $number = ($negative ? "-" : "") . $digits;
+        print $start, "\0", $end, "\0", $number, "\0";
+    ' (commandline -C) $amount | string split0)
+    or return
+
+    set -l selection_start (commandline -B)
+    set -l cursor_side right
+    if test -n "$selection_start" -a (commandline -C) = "$selection_start"
+        set cursor_side left
+    end
+
+    __fish_helix_replace_range $result[1] $result[2] "$result[3]" $cursor_side
+end
+
+function __fish_helix_trim_selection
+    set -l start (commandline -B)
+    set -l end (commandline -E)
+    set -l cursor (commandline -C)
+    test -n "$start" -a -n "$end" -a "$start" != "$end"
+    or return
+
+    commandline --current-selection | sed -z 's/\n$//' | read -lz selection
+    set -l trimmed_left (string trim --left -- "$selection" | string collect)
+    set -l trimmed (string trim -- "$selection" | string collect)
+    if test -z "$trimmed"
+        commandline -f end-selection
+        commandline -C $cursor
+        commandline -f begin-selection
+        return
+    end
+
+    set -l trimmed_start (math $start + (string length -- "$selection") - (string length -- "$trimmed_left"))
+    set -l trimmed_end (math $trimmed_start + (string length -- "$trimmed"))
+    set -l cursor_side right
+    if test "$cursor" = "$start"
+        set cursor_side left
+    end
+    __fish_helix_select_range $trimmed_start $trimmed_end $cursor_side
+end
+
+function __fish_helix_ensure_selection_forward
+    set -l start (commandline -B)
+    set -l end (commandline -E)
+    set -l cursor (commandline -C)
+    if test -n "$start" -a -n "$end" -a (math $end - $start) -gt 1 -a "$cursor" = "$start"
+        commandline -f swap-selection-start-stop
     end
 end
 
@@ -568,6 +730,8 @@ end
 
 function __fish_helix_next_word -a mode count regex
     set -f cursor (commandline -C)
+    set -l selection_start (commandline -B)
+    set -l selection_end (commandline -E)
     commandline |
         perl -e '
         use open qw(:std :utf8);
@@ -576,8 +740,16 @@ function __fish_helix_next_word -a mode count regex
         read -f left right
     if test "$left" = "$right"
         commandline --current-buffer |
-            perl -0 -e 'chomp; exit substr($_, -1) eq "\n" ? 0 : 1'
-        or return
+            perl -0777 -e 'my $buffer = <>; $buffer =~ s/\n\z//; exit(substr($buffer, -1) eq "\n" ? 0 : 1)'
+        or begin
+            if test -n "$selection_start" -a -n "$selection_end" -a "$selection_start" != "$selection_end"
+                set -l cursor_side right
+                test "$cursor" = "$selection_start"
+                and set cursor_side left
+                __fish_helix_select_range $selection_start $selection_end $cursor_side
+            end
+            return
+        end
 
         commandline -C (math $cursor + $left)
         if test $mode = default
