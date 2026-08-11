@@ -1,15 +1,35 @@
 # fish-helix
 
-Helix-like key bindings for the fish command line.
+[Helix](https://helix-editor.com/)-like key bindings for the [fish shell](https://fishshell.com/).
 
-# Installation
+## Installation
 
 Dependencies: fish >= 4.0, perl, and common GNU tools.
 
 Tested with fish 4.8.1.
 
-1. Copy `functions` directory as `~/.config/fish/functions`.
-2. Run `fish_helix_key_bindings`.
+1. Clone the repository:
+
+   ```fish
+   git clone https://github.com/rnwst/fish-helix.git ~/.config/fish/fish-helix
+   ```
+
+2. Symlink the provided functions into Fish's function directory:
+
+   ```fish
+   mkdir -p ~/.config/fish/functions
+   for function_file in ~/.config/fish/fish-helix/functions/*.fish
+       ln -s "$function_file" ~/.config/fish/functions/
+   end
+   ```
+
+3. Enable the bindings. Run `fish_helix_key_bindings` directly for the
+   current session, or add it to `~/.config/fish/config.fish` to enable the
+   bindings whenever Fish starts:
+
+   ```fish
+   fish_helix_key_bindings
+   ```
 
 ## Compatibility
 
