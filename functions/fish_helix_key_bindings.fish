@@ -140,24 +140,6 @@ function fish_helix_key_bindings --description 'helix-like key bindings for fish
         bind -s --preset -M $mode T "fish_helix_command till_prev_char"
         bind -s --preset -M $mode F "fish_helix_command find_prev_char"
 
-        bind -s --preset -M $mode t,escape ""
-        bind -s --preset -M $mode f,escape ""
-        bind -s --preset -M $mode T,escape ""
-        bind -s --preset -M $mode F,escape ""
-
-        bind -s --preset -M $mode t,enter "fish_helix_command till_next_cr"
-        bind -s --preset -M $mode f,enter "fish_helix_command find_next_cr"
-        bind -s --preset -M $mode T,enter "fish_helix_command till_prev_cr"
-        bind -s --preset -M $mode F,enter "fish_helix_command find_prev_cr"
-        bind -s --preset -M $mode t,ctrl-m "fish_helix_command till_next_cr"
-        bind -s --preset -M $mode f,ctrl-m "fish_helix_command find_next_cr"
-        bind -s --preset -M $mode T,ctrl-m "fish_helix_command till_prev_cr"
-        bind -s --preset -M $mode F,ctrl-m "fish_helix_command find_prev_cr"
-        bind -s --preset -M $mode t,ctrl-j "fish_helix_command till_next_cr"
-        bind -s --preset -M $mode f,ctrl-j "fish_helix_command find_next_cr"
-        bind -s --preset -M $mode T,ctrl-j "fish_helix_command till_prev_cr"
-        bind -s --preset -M $mode F,ctrl-j "fish_helix_command find_prev_cr"
-
         for key in g,h home
             bind -s --preset -M $mode $key "fish_helix_command goto_line_start"
         end
@@ -169,7 +151,7 @@ function fish_helix_key_bindings --description 'helix-like key bindings for fish
         bind -s --preset -M $mode G "fish_helix_command goto_line"
         bind -s --preset -M $mode g,e "fish_helix_command goto_last_line"
 
-        bind -s --preset -M $mode escape,. repeat-jump
+        bind -s --preset -M $mode escape,. "fish_helix_command repeat_last_motion"
 
         # FIXME reselect after undo/redo
         bind -s --preset -M $mode u undo begin-selection
@@ -236,6 +218,12 @@ function fish_helix_key_bindings --description 'helix-like key bindings for fish
 
         ## FIXME [ and ] motions
     end
+
+    bind -s --preset -M fish_helix_find_char "" get-key 'fish_helix_command find_char_key "$fish_key"; set -e fish_key'
+    bind -s --preset -M fish_helix_find_char enter get-key 'fish_helix_command find_char_key "$fish_key"; set -e fish_key'
+    bind -s --preset -M fish_helix_find_char space get-key 'fish_helix_command find_char_key "$fish_key"; set -e fish_key'
+    bind -s --preset -M fish_helix_find_char tab get-key 'fish_helix_command find_char_key "$fish_key"; set -e fish_key'
+    bind -s --preset -M fish_helix_find_char escape "fish_helix_command cancel_find_char"
 
     # FIXME should replace the whole selection
     # FIXME should be able to go back to visual mode

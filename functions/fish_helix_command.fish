@@ -80,13 +80,21 @@ function fish_helix_command
 
 
         case till_next_char
-            __fish_helix_find_char $fish_bind_mode $count forward-jump-till forward-char
+            __fish_helix_prepare_find_char $fish_bind_mode $count forward exclusive
         case find_next_char
-            __fish_helix_find_char $fish_bind_mode $count forward-jump
+            __fish_helix_prepare_find_char $fish_bind_mode $count forward inclusive
         case till_prev_char
-            __fish_helix_find_char $fish_bind_mode $count backward-jump-till backward-char
+            __fish_helix_prepare_find_char $fish_bind_mode $count backward exclusive
         case find_prev_char
-            __fish_helix_find_char $fish_bind_mode $count backward-jump
+            __fish_helix_prepare_find_char $fish_bind_mode $count backward inclusive
+
+        case find_char_key
+            __fish_helix_find_char_key $argv[2]
+            return
+        case cancel_find_char
+            __fish_helix_cancel_find_char
+        case repeat_last_motion
+            __fish_helix_repeat_last_motion $fish_bind_mode $count
 
         case till_next_cr
             __fish_helix_find_next_cr $fish_bind_mode $count 2
@@ -189,14 +197,119 @@ function __fish_helix_extend_by_mode
     end
 end
 
-function __fish_helix_find_char -a mode count fish_cmdline till
-    # FIXME don't reset selection if N/A
-    if test $mode = default
-        commandline -f begin-selection
+function __fish_helix_prepare_find_char -a mode count direction inclusive
+    set -g __fish_helix_find_char_mode $mode
+    set -g __fish_helix_find_char_count $count
+    set -g __fish_helix_find_char_direction $direction
+    set -g __fish_helix_find_char_inclusive $inclusive
+    set fish_bind_mode fish_helix_find_char
+    commandline -f repaint-mode
+end
+
+function __fish_helix_find_char_key -a key
+    set -l mode $__fish_helix_find_char_mode
+    set -l count $__fish_helix_find_char_count
+    set -l direction $__fish_helix_find_char_direction
+    set -l inclusive $__fish_helix_find_char_inclusive
+
+    __fish_helix_clear_pending_find_char
+    test -n "$mode"
+    or set mode default
+    set fish_bind_mode $mode
+
+    if __fish_helix_apply_find_char $mode $count $direction $inclusive "$key"
+        set -g __fish_helix_last_find_char_key "$key"
+        set -g __fish_helix_last_find_char_direction $direction
+        set -g __fish_helix_last_find_char_inclusive $inclusive
     end
-    commandline -f $till $fish_cmdline
-    for i in (seq 2 $count)
-        commandline -f $till repeat-jump
+    commandline -f repaint-mode
+end
+
+function __fish_helix_cancel_find_char
+    set -l mode $__fish_helix_find_char_mode
+    __fish_helix_clear_pending_find_char
+    test -n "$mode"
+    or set mode default
+    set fish_bind_mode $mode
+    commandline -f repaint-mode
+end
+
+function __fish_helix_clear_pending_find_char
+    set -e __fish_helix_find_char_mode
+    set -e __fish_helix_find_char_count
+    set -e __fish_helix_find_char_direction
+    set -e __fish_helix_find_char_inclusive
+end
+
+function __fish_helix_repeat_last_motion -a mode count
+    test -n "$__fish_helix_last_find_char_key"
+    or return
+    __fish_helix_apply_find_char $mode $count $__fish_helix_last_find_char_direction $__fish_helix_last_find_char_inclusive "$__fish_helix_last_find_char_key"
+end
+
+function __fish_helix_apply_find_char -a mode count direction inclusive key
+    set -l cursor (commandline -C)
+    commandline --current-buffer |
+    perl -CS -Mutf8 -e '
+        use open qw(:std :utf8);
+        my ($direction, $inclusive, $count, $cursor, $key) = @ARGV;
+        my $buffer = do { local $/; <STDIN> };
+        chomp $buffer;
+        my @chars = split //, $buffer;
+        my $length = scalar @chars;
+        my $seen = 0;
+        my $found;
+
+        if ($direction eq "forward") {
+            my $start = $cursor + ($inclusive eq "inclusive" ? 1 : 2);
+            for (my $i = $start; $i < $length; $i++) {
+                next unless $chars[$i] eq $key;
+                $seen++;
+                if ($seen == $count) {
+                    $found = $i;
+                    last;
+                }
+            }
+            $found-- if defined $found && $inclusive ne "inclusive";
+        } else {
+            my $start = $cursor + ($inclusive eq "inclusive" ? 0 : -1);
+            $start = $length - 1 if $start >= $length;
+            for (my $i = $start; $i >= 0; $i--) {
+                next unless $chars[$i] eq $key;
+                $seen++;
+                if ($seen == $count) {
+                    $found = $i;
+                    last;
+                }
+            }
+            $found++ if defined $found && $inclusive ne "inclusive";
+        }
+
+        exit 1 unless defined $found && $found >= 0 && $found < $length;
+        print $found;
+    ' $direction $inclusive $count $cursor "$key" |
+    read -l target
+    or return 1
+
+    if test $mode = visual
+        set -l start (commandline -B)
+        set -l end (commandline -E)
+        set -l anchor $start
+        if test -n "$start" -a -n "$end" -a "$cursor" = "$start"
+            set anchor (math $end - 1)
+        end
+
+        if test $target -lt $anchor
+            __fish_helix_select_range $target (math $anchor + 1) left
+        else
+            __fish_helix_select_range $anchor (math $target + 1) right
+        end
+    else
+        if test $direction = backward
+            __fish_helix_select_range $target (math $cursor + 1) left
+        else
+            __fish_helix_select_range $cursor (math $target + 1) right
+        end
     end
 end
 

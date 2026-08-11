@@ -3,7 +3,14 @@ function fish_default_mode_prompt --description "Display vi/helix prompt mode"
     if test "$fish_key_bindings" = fish_vi_key_bindings
         or test "$fish_key_bindings" = fish_helix_key_bindings
         or test "$fish_key_bindings" = fish_hybrid_key_bindings
-        switch $fish_bind_mode
+        set -l prompt_bind_mode $fish_bind_mode
+        if test "$prompt_bind_mode" = fish_helix_find_char
+            set prompt_bind_mode $__fish_helix_find_char_mode
+            test -n "$prompt_bind_mode"
+            or set prompt_bind_mode default
+        end
+
+        switch $prompt_bind_mode
             case default
                 set_color --bold red
                 echo '[N]'
