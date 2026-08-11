@@ -32,7 +32,7 @@ Install the test dependencies:
 - `tmux`
 - `inotify-tools`
 - `perl`
-- fish 4.x
+- `fish` (4.x)
 
 Then run:
 
@@ -74,15 +74,3 @@ Some Helix features do not fit well in a shell prompt and are not implemented:
 - Windows and pickers
 - Registers and macros
 - Most shell/filter commands from Helix
-
-## Custom Binding Notes
-
-When defining your own bindings using fish_helix_command, be aware that it can break
-stuff sometimes.
-
-It is safe to define a binding consisting of a lone call to fish_helix_command.
-Calls to other functions and executables are allowed along with it, granted they don't mess
-with fish's commandline buffer.
-
-Mixing multiple fish_helix_commandline and commandline calls in one binding MAY trigger issues.
-Nothing serious, but don't be surprised. Just test it.
