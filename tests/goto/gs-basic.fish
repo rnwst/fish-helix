@@ -1,2 +1,2 @@
 _input "  hello" Normal gs
-_selection "h"
+_selection h

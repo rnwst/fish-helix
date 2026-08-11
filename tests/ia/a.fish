@@ -1,2 +1,2 @@
-_input "asdf" Normal FdFsaq
-_buffer "asdqf"
+_input asdf Normal FdFsaq
+_buffer asdqf

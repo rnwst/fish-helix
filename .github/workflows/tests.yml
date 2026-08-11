@@ -17,6 +17,11 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: latest
+
       - name: Install dependencies
         run: |
           sudo apt-get update
@@ -24,7 +29,12 @@ jobs:
           sudo add-apt-repository -y ppa:fish-shell/release-4
           sudo apt-get update
           sudo apt-get install -y fish tmux inotify-tools perl
+          npm install -g fish-lsp@1.1.4
           fish --version
+          fish-lsp --version
+
+      - name: Check fish formatting
+        run: node scripts/format-fish-lsp.mjs --check
 
       - name: Run tests
         run: ./run-tests

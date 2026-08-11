@@ -19,32 +19,32 @@ function check
     set expected "$q_expected[$check_index]"
     test -n "$broken" && touch "$temp_dir/broken"
     switch $property
-    case mode
-        set caption "Bind mode:        "
-        set value "$fish_bind_mode"
-    case line
-        set caption "Cursor line:      "
-        set value "$(commandline --line)"
-    case cursor
-        set caption "Cursor position:  "
-        set value "$(commandline --cursor)"
-    case buffer
-        set caption "Buffer content:   "
-        commandline | sed -z 's/\\n$//' | read -lz buffer
-        set value "$buffer"
-    case selection
-        set caption "Selection content:"
-        commandline --current-selection | sed -z 's/\\n$//' | read -lz selection
-        set value "$selection"
+        case mode
+            set caption "Bind mode:        "
+            set value "$fish_bind_mode"
+        case line
+            set caption "Cursor line:      "
+            set value "$(commandline --line)"
+        case cursor
+            set caption "Cursor position:  "
+            set value "$(commandline --cursor)"
+        case buffer
+            set caption "Buffer content:   "
+            commandline | sed -z 's/\\n$//' | read -lz buffer
+            set value "$buffer"
+        case selection
+            set caption "Selection content:"
+            commandline --current-selection | sed -z 's/\\n$//' | read -lz selection
+            set value "$selection"
     end
     if test _"$value" != _"$expected"
-        echo "$caption $(string escape -- "$value") ($(string escape -- "$expected") expected)" >> "$temp_dir/out"
+        echo "$caption $(string escape -- "$value") ($(string escape -- "$expected") expected)" >>"$temp_dir/out"
         test -z $broken && touch "$temp_dir/failure"
     else if test -n $broken
-        echo "$caption $(string escape -- "$value") (broken value fixed)" >> "$temp_dir/out"
+        echo "$caption $(string escape -- "$value") (broken value fixed)" >>"$temp_dir/out"
         touch "$temp_dir/fixed"
     else
-        echo "$caption $(string escape -- "$value")" >> "$temp_dir/out"
+        echo "$caption $(string escape -- "$value")" >>"$temp_dir/out"
     end
 end
 
@@ -88,40 +88,40 @@ end
 function _input
     for sequence in $argv
         switch "$sequence"
-        case "Normal"
-            $tmux send-keys F11
-            sleep 0.1
-        case "Line"
-            $tmux send-keys F11 o
-            sleep 0.1
-        case "Escape"
-            $tmux send-keys Escape
-            sleep 0.1
-        case "Enter"
-            $tmux send-keys Enter
-            sleep 0.1
-        case "t-enter"
-            $tmux send-keys t Enter
-            sleep 0.1
-        case "f-enter"
-            $tmux send-keys f Enter
-            sleep 0.05
-        case "T-enter"
-            $tmux send-keys T Enter
-            sleep 0.05
-        case "F-enter"
-            $tmux send-keys F Enter
-            sleep 0.05
-        case '*'
-            if string match -qr '[^[:ascii:]]' -- "$sequence"
-                $tmux send-keys -- "$sequence"
+            case Normal
+                $tmux send-keys F11
                 sleep 0.1
-            else
-                for char in (string split '' -- "$sequence")
-                    $tmux send-keys -- "$char"
+            case Line
+                $tmux send-keys F11 o
+                sleep 0.1
+            case Escape
+                $tmux send-keys Escape
+                sleep 0.1
+            case Enter
+                $tmux send-keys Enter
+                sleep 0.1
+            case t-enter
+                $tmux send-keys t Enter
+                sleep 0.1
+            case f-enter
+                $tmux send-keys f Enter
+                sleep 0.05
+            case T-enter
+                $tmux send-keys T Enter
+                sleep 0.05
+            case F-enter
+                $tmux send-keys F Enter
+                sleep 0.05
+            case '*'
+                if string match -qr '[^[:ascii:]]' -- "$sequence"
+                    $tmux send-keys -- "$sequence"
                     sleep 0.1
+                else
+                    for char in (string split '' -- "$sequence")
+                        $tmux send-keys -- "$char"
+                        sleep 0.1
+                    end
                 end
-            end
         end
     end
 end
