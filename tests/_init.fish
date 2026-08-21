@@ -140,7 +140,7 @@ function _input
     end
 end
 
-set -g fish_key_bindings fish_helix_key_bindings
+fish_helix_key_bindings
 bind --user --erase --all
 for mode in default visual insert
     bind --user -M $mode f12 validate

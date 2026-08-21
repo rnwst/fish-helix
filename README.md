@@ -103,6 +103,7 @@ Normal and select mode support includes:
 - Modes: `Escape`, `v`, `i`, `a`, `I`, `A`, `o`, `O`
 - Motions: `h`, `j`, `k`, `l`, arrows, `w`, `b`, `e`, `W`, `B`, `E`, `f`, `F`, `t`, `T`, `Alt-.`
 - Goto: `gh`, `gl`, `gs`, `gg`, `ge`, `G`, `Home`, `End`
+- History search: `/`
 - Counts: `0`-`9`; `Backspace` removes the last pending digit and `Escape` clears the count
 - Changes: `r`, `~`, `` ` ``, `` Alt-` ``, `Ctrl-a`, `Ctrl-x`, `u`, `U`, `d`, `Alt-d`, `c`, `Alt-c`, `y`, `p`, `P`, `R`
 - Selection: `x`, `X`, `Alt-x`, `%`, `;`, `Alt-;`, `Alt-:`, `_`, `J`, `mm`
@@ -119,6 +120,6 @@ Some Helix features do not fit well in a shell prompt and are not implemented:
 - Windows and pickers
 - Registers and macros
 - Most shell/filter commands from Helix
-- Editor-specific indentation, formatting, search, and unimpaired motions (`[p`, `]p`, `[<Space>`, ...)
+- Editor-specific indentation, formatting, command-line text search, and unimpaired motions (`[p`, `]p`, `[<Space>`, ...)
 
 Insert mode otherwise keeps fish's shell-oriented bindings for completion, autosuggestions, clipboard access, and word deletion. `Ctrl-c` also remains command-line cancellation rather than Helix's comment command.

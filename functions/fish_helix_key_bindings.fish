@@ -83,6 +83,7 @@ function fish_helix_key_bindings --description 'helix-like key bindings for fish
     # Switching between normal and visual mode
     bind -s --preset -M default -m visual v repaint-mode
     bind -s --preset -M default escape "fish_bind_count --zero"
+    bind -s --preset -M default -m insert / history-pager repaint-mode
     for key in v escape
         bind -s --preset -M visual -m default $key "fish_bind_count --zero; commandline -f repaint-mode"
     end
