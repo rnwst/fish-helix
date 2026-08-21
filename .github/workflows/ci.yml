@@ -1,4 +1,4 @@
-name: Tests
+name: CI
 
 on:
   push:
@@ -11,8 +11,28 @@ permissions:
   contents: read
 
 jobs:
-  test:
+  tests:
     name: Run fish-helix tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y software-properties-common
+          sudo add-apt-repository -y ppa:fish-shell/release-4
+          sudo apt-get update
+          sudo apt-get install -y fish tmux inotify-tools perl
+          fish --version
+
+      - name: Run tests
+        run: ./run-tests
+
+  formatting:
+    name: Check fish formatting
     runs-on: ubuntu-latest
 
     steps:
@@ -30,13 +50,10 @@ jobs:
           sudo apt-get install -y software-properties-common
           sudo add-apt-repository -y ppa:fish-shell/release-4
           sudo apt-get update
-          sudo apt-get install -y fish tmux inotify-tools perl
+          sudo apt-get install -y fish
           npm install -g fish-lsp@1.1.4
           fish --version
           fish-lsp --version
 
       - name: Check fish formatting
         run: node scripts/format-fish-lsp.mjs --check
-
-      - name: Run tests
-        run: ./run-tests
