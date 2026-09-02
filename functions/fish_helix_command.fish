@@ -15,7 +15,20 @@ function fish_helix_command
                 commandline -C (math max\(0, (commandline -C) - $count\))
                 __fish_helix_extend_by_command $command
             case {move,extend}_char_right
-                commandline -C (math min\((__fish_helix_buffer_length), (commandline -C) + $count\))
+                set -l cursor (commandline -C)
+                set -l old_length (__fish_helix_buffer_length)
+                set -l needed (math max\(0, $cursor + $count - $old_length\))
+                __fish_helix_accept_autosuggestion forward-single-char $needed
+                set -l length (__fish_helix_buffer_length)
+                if test $length -gt $old_length
+                    set -l target (math $cursor + $count)
+                    if test $cursor -eq $old_length
+                        set target (math $target - 1)
+                    end
+                    commandline -C (math min\($length - 1, $target\))
+                else
+                    commandline -C (math min\($length, $cursor + $count\))
+                end
                 __fish_helix_extend_by_command $command
 
             case char_up
@@ -24,6 +37,7 @@ function fish_helix_command
                 __fish_helix_char_down $fish_bind_mode $count
 
             case next_word_start
+                __fish_helix_accept_autosuggestion forward-word-vi $count
                 # https://regex101.com/r/KXrl1x/1
                 set -l regex (string join '' \
             '(?:.?\\n+|' \
@@ -35,6 +49,7 @@ function fish_helix_command
                 __fish_helix_next_word $fish_bind_mode $count $regex
 
             case next_long_word_start
+                __fish_helix_accept_autosuggestion forward-bigword-vi $count
                 set -l regex (string join '' \
             '(?:.?\\n+|' \
             '[^\\S\\n](?=[\\S\\n])|)' \
@@ -43,6 +58,7 @@ function fish_helix_command
                 __fish_helix_next_word $fish_bind_mode $count $regex
 
             case next_word_end
+                __fish_helix_accept_autosuggestion forward-word-end $count
                 # https://regex101.com/r/Gl0KP2/1
                 set -l regex ' (?:
                 .?\\n+ |
@@ -53,6 +69,7 @@ function fish_helix_command
                 __fish_helix_next_word $fish_bind_mode $count $regex
 
             case next_long_word_end
+                __fish_helix_accept_autosuggestion forward-bigword-end $count
                 set -l regex ' (?: .?\\n+ | \\S(?=\\s) | )
             ( [^\\S\\n]* \\S* ) '
                 __fish_helix_next_word $fish_bind_mode $count $regex
@@ -102,6 +119,7 @@ function fish_helix_command
                 commandline -f beginning-of-line
                 __fish_helix_extend_by_mode
             case goto_line_end
+                __fish_helix_accept_autosuggestion end-of-line 1
                 __fish_helix_goto_line_end
                 __fish_helix_extend_by_mode
             case goto_first_nonwhitespace
@@ -115,6 +133,7 @@ function fish_helix_command
                     __fish_helix_goto_line $count
                 end
             case goto_last_line
+                __fish_helix_accept_autosuggestion end-of-buffer 1
                 commandline -f end-of-buffer beginning-of-line
                 __fish_helix_extend_by_mode
 
@@ -199,6 +218,61 @@ function __fish_helix_prepare_replace_char -a mode
     set -g __fish_helix_replace_char_mode $mode
     set fish_bind_mode replace_one
     commandline -f repaint-mode
+end
+
+function __fish_helix_accept_autosuggestion -a motion count until
+    test "$count" -gt 0
+    or return 1
+    commandline --showing-suggestion
+    or return 1
+
+    set -l cursor (commandline -C)
+    set -l old_length (__fish_helix_buffer_length)
+    test "$cursor" -eq "$old_length"
+    or return 1
+
+    set -l selection_start (commandline -B)
+    set -l has_selection $status
+    set -l selection_end (commandline -E)
+    set -l cursor_side right
+    test "$cursor" = "$selection_start"
+    and set cursor_side left
+
+    commandline -f end-selection
+    set -l accepted 0
+    while commandline --showing-suggestion
+        if not set -q argv[3]
+            and test $accepted -ge $count
+            break
+        end
+        set -l length (__fish_helix_buffer_length)
+        commandline -C $length
+        commandline -f $motion
+        test (__fish_helix_buffer_length) -gt $length
+        or break
+        set accepted (math $accepted + 1)
+
+        if set -q argv[3]
+            commandline --current-buffer | sed -z 's/\n$//' | read -lz buffer
+            set -l char (string sub --start (math $length + 1) --length 1 -- "$buffer")
+            if test "$char" = "$until"
+                set count (math $count - 1)
+                test $count -eq 0
+                and break
+            end
+        end
+    end
+    commandline -C $cursor
+
+    if test $has_selection -eq 0
+        if test -n "$selection_start" -a -n "$selection_end" -a "$selection_start" != "$selection_end"
+            __fish_helix_select_range $selection_start $selection_end $cursor_side
+        else
+            commandline -f begin-selection
+        end
+    end
+
+    test (__fish_helix_buffer_length) -gt $old_length
 end
 
 function __fish_helix_replace_char_key -a key
@@ -321,10 +395,23 @@ end
 
 function __fish_helix_apply_find_char -a mode count direction inclusive key
     set -l cursor (commandline -C)
+    set -l old_length (__fish_helix_buffer_length)
+    commandline --current-buffer | sed -z 's/\n$//' | read -lz old_buffer
+    set -l selection_start (commandline -B)
+    set -l has_selection $status
+    set -l selection_end (commandline -E)
+    set -l cursor_side right
+    test "$cursor" = "$selection_start"
+    and set cursor_side left
+    set -l suggestion_start false
+    if test $direction = forward -a $cursor -eq $old_length
+        __fish_helix_accept_autosuggestion forward-single-char $count "$key"
+        and set suggestion_start true
+    end
     commandline --current-buffer |
         perl -CS -Mutf8 -e '
         use open qw(:std :utf8);
-        my ($direction, $inclusive, $count, $cursor, $key) = @ARGV;
+        my ($direction, $inclusive, $count, $cursor, $key, $suggestion_start) = @ARGV;
         my $buffer = do { local $/; <STDIN> };
         chomp $buffer;
         $buffer .= "\n" if $key eq "\n";
@@ -334,7 +421,9 @@ function __fish_helix_apply_find_char -a mode count direction inclusive key
         my $found;
 
         if ($direction eq "forward") {
-            my $start = $cursor + ($inclusive eq "inclusive" ? 1 : 2);
+            my $start = $suggestion_start eq "true"
+                ? $cursor
+                : $cursor + ($inclusive eq "inclusive" ? 1 : 2);
             for (my $i = $start; $i < $length; $i++) {
                 next unless $chars[$i] eq $key;
                 $seen++;
@@ -344,6 +433,7 @@ function __fish_helix_apply_find_char -a mode count direction inclusive key
                 }
             }
             $found-- if defined $found && $inclusive ne "inclusive";
+            undef $found if defined $found && $suggestion_start eq "true" && $found < $cursor;
         } else {
             my $start = $cursor + ($inclusive eq "inclusive" ? 0 : -1);
             $start = $length - 1 if $start >= $length;
@@ -360,15 +450,33 @@ function __fish_helix_apply_find_char -a mode count direction inclusive key
 
         exit 1 unless defined $found && $found >= 0 && $found < $length;
         print $found;
-    ' $direction $inclusive $count $cursor "$key" |
+    ' $direction $inclusive $count $cursor "$key" $suggestion_start |
         read -l target
-    or return 1
+    or begin
+        if test $suggestion_start = true
+            commandline --replace -- "$old_buffer"
+            commandline -C $cursor
+            if test $has_selection -eq 0
+                if test -n "$selection_start" -a -n "$selection_end" -a "$selection_start" != "$selection_end"
+                    __fish_helix_select_range $selection_start $selection_end $cursor_side
+                else
+                    commandline -f begin-selection
+                end
+            end
+        end
+        return 1
+    end
+
+    if test $suggestion_start = true -a $inclusive != inclusive
+        commandline --current-buffer | sed -z 's/\n$//' | read -lz buffer
+        commandline --replace -- (string sub --length (math $target + 1) -- "$buffer")
+    end
 
     if test $mode = visual
-        set -l start (commandline -B)
-        set -l end (commandline -E)
+        set -l start $selection_start
+        set -l end $selection_end
         set -l anchor $start
-        if test -n "$start" -a -n "$end" -a "$cursor" = "$start"
+        if test -n "$start" -a -n "$end" -a "$start" != "$end" -a "$cursor" = "$start"
             set anchor (math $end - 1)
         end
 
