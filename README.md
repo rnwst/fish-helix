@@ -109,6 +109,8 @@ Normal and select mode support includes:
 - Selection: `x`, `X`, `Alt-x`, `%`, `;`, `Alt-;`, `Alt-:`, `_`, `J`, `mm`
 - Clipboard: `Space-y`, `Space-p`, `Space-P`, `Space-R`
 
+Forward character, word, find/till, line-end, and buffer-end motions accept autosuggestions incrementally while preserving Helix-style selections.
+
 In Normal and select mode, `Ctrl-a` increments a decimal number and `Ctrl-x` decrements it. Insert mode retains fish's shared `Ctrl-x` clipboard-copy binding.
 
 ## Known Limits

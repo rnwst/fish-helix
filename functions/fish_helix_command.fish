@@ -18,6 +18,9 @@ function fish_helix_command
                 set -l cursor (commandline -C)
                 set -l old_length (__fish_helix_buffer_length)
                 set -l needed (math max\(0, $cursor + $count - $old_length\))
+                if __fish_helix_selection_ends_at_buffer $cursor $old_length
+                    set needed (math max\(0, $cursor + $count + 1 - $old_length\))
+                end
                 __fish_helix_accept_autosuggestion forward-single-char $needed
                 set -l length (__fish_helix_buffer_length)
                 if test $length -gt $old_length
@@ -228,12 +231,14 @@ function __fish_helix_accept_autosuggestion -a motion count until
 
     set -l cursor (commandline -C)
     set -l old_length (__fish_helix_buffer_length)
-    test "$cursor" -eq "$old_length"
-    or return 1
-
     set -l selection_start (commandline -B)
     set -l has_selection $status
     set -l selection_end (commandline -E)
+    if test "$cursor" -ne "$old_length"
+        __fish_helix_selection_ends_at_buffer $cursor $old_length
+        or return 1
+        commandline -C $old_length
+    end
     set -l cursor_side right
     test "$cursor" = "$selection_start"
     and set cursor_side left
@@ -404,14 +409,17 @@ function __fish_helix_apply_find_char -a mode count direction inclusive key
     test "$cursor" = "$selection_start"
     and set cursor_side left
     set -l suggestion_start false
-    if test $direction = forward -a $cursor -eq $old_length
-        __fish_helix_accept_autosuggestion forward-single-char $count "$key"
-        and set suggestion_start true
+    if test $direction = forward
+        if test $cursor -eq $old_length
+            or __fish_helix_selection_ends_at_buffer $cursor $old_length
+            __fish_helix_accept_autosuggestion forward-single-char $count "$key"
+            and set suggestion_start true
+        end
     end
     commandline --current-buffer |
         perl -CS -Mutf8 -e '
         use open qw(:std :utf8);
-        my ($direction, $inclusive, $count, $cursor, $key, $suggestion_start) = @ARGV;
+        my ($direction, $inclusive, $count, $cursor, $key, $suggestion_start, $old_length) = @ARGV;
         my $buffer = do { local $/; <STDIN> };
         chomp $buffer;
         $buffer .= "\n" if $key eq "\n";
@@ -422,7 +430,7 @@ function __fish_helix_apply_find_char -a mode count direction inclusive key
 
         if ($direction eq "forward") {
             my $start = $suggestion_start eq "true"
-                ? $cursor
+                ? $old_length
                 : $cursor + ($inclusive eq "inclusive" ? 1 : 2);
             for (my $i = $start; $i < $length; $i++) {
                 next unless $chars[$i] eq $key;
@@ -450,7 +458,7 @@ function __fish_helix_apply_find_char -a mode count direction inclusive key
 
         exit 1 unless defined $found && $found >= 0 && $found < $length;
         print $found;
-    ' $direction $inclusive $count $cursor "$key" $suggestion_start |
+    ' $direction $inclusive $count $cursor "$key" $suggestion_start $old_length |
         read -l target
     or begin
         if test $suggestion_start = true
@@ -492,6 +500,12 @@ function __fish_helix_apply_find_char -a mode count direction inclusive key
             __fish_helix_select_range $cursor (math $target + 1) right
         end
     end
+end
+
+function __fish_helix_selection_ends_at_buffer -a cursor length
+    commandline -B >/dev/null
+    and test "$cursor" -eq (math $length - 1)
+    and test (commandline -E) -eq $length
 end
 
 function __fish_helix_buffer_length
