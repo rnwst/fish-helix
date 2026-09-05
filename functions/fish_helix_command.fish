@@ -469,9 +469,12 @@ function __fish_helix_apply_find_char -a mode count direction inclusive key
     if test $mode = visual
         set -l start $selection_start
         set -l end $selection_end
-        set -l anchor $start
-        if test -n "$start" -a -n "$end" -a "$start" != "$end" -a "$cursor" = "$start"
-            set anchor (math $end - 1)
+        set -l anchor $cursor
+        if test -n "$start" -a -n "$end" -a "$start" != "$end"
+            set anchor $start
+            if test "$cursor" = "$start"
+                set anchor (math $end - 1)
+            end
         end
 
         if test $target -lt $anchor
